@@ -1,0 +1,205 @@
+<script>
+  import {onMount, onDestroy} from 'svelte';
+  import {isEqual, isEmpty} from 'lodash-es';
+
+  const EntryState = {
+    EDITABLE: "EDITABLE",
+    EDITING: "EDITING",
+    READ_ONLY: "READ_ONLY"
+  };
+
+  export let sdk;
+  const {url, apiKey} = sdk.parameters.installation;
+  $: console.log(`Params: ${JSON.stringify({url, apiKey})}`);
+  let beforeCheckoutFieldValues = getFieldData(sdk.entry.fields);
+  let entryState = EntryState.EDITABLE;
+  $: console.log(`entryState: ${entryState}`);
+  const detachFieldHandlers = [];
+  let resettingValue = false;
+  let fetchedInitialEntryData = false;
+
+  onMount(
+    async () => {
+      console.log('starting window resizer');
+      sdk.window.startAutoResizer();
+      // register handlers to reset values
+      for (const fieldsKey in sdk.entry.fields) {
+        const field = sdk.entry.fields[fieldsKey];
+        detachFieldHandlers.push(
+          field.onValueChanged(value => {
+            // if we are in a readonly state, don't save any changes
+            if (
+              (entryState == EntryState.EDITABLE || entryState == EntryState.READ_ONLY) &&
+              !isEqual(value, beforeCheckoutFieldValues[fieldsKey])
+            ) {
+              console.group("Value changed");
+              console.log(`Detected change in field: ${fieldsKey}`);
+              console.log(`New value is ${value}`);
+              console.log(`Old value is ${beforeCheckoutFieldValues[fieldsKey]}`);
+              console.log(`Entry state is ${entryState}`);
+              console.groupEnd();
+              if (!resettingValue) {
+                // special case to deal with slugs in newly created entries
+                if (typeof value == 'string' && value.includes('untitled')) {
+                  beforeCheckoutFieldValues[field.id] = (beforeCheckoutFieldValues[field.id]).substr(9);
+                  return;
+                }
+                resettingValue = true;
+                field.setValue(beforeCheckoutFieldValues[field.id]).then(() => {
+                  resettingValue = false;
+                });
+                let message = "";
+                if (entryState == EntryState.EDITABLE)
+                  message = 'You are viewing the current entry in read only mode!';
+                else if (entryState == EntryState.READ_ONLY)
+                  message = 'Some else is editing!';
+                sdk.dialogs.openAlert({
+                  title: 'Warning!',
+                  message: message,
+                  shouldCloseOnOverlayClick: false
+                });
+              }
+            }
+          })
+        );
+      }
+      // call api to check if entry is editable
+      const response = await fetch(url + `${sdk.entry.getSys().id}/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey
+        }
+      });
+      const data = await response.json();
+      console.log(`Fetched remote data: ${JSON.stringify(data)}`);
+      // entry doesn't exist in db
+      if (isEmpty(data)) return;
+
+      if (data.entryState == 'EDITING') {
+        // current user has previously checked out
+        if (data.userId == sdk.user.sys.id) {
+          entryState = EntryState.EDITING;
+          beforeCheckoutFieldValues = data.initialValues;
+        }
+      }
+
+      fetchedInitialEntryData = true;
+    }
+  );
+
+  onDestroy(() => {
+    console.log('stopping window resizer');
+    sdk.window.stopAutoResizer();
+    detachFieldHandlers.forEach(detachHandler => {
+      detachHandler();
+    });
+  });
+
+  function getFieldData(fields) {
+    console.group("getFieldData");
+    const fieldsData = {};
+    for (const fieldsKey in fields) {
+      const field = fields[fieldsKey];
+      fieldsData[fieldsKey] = field.getValue();
+      console.log(`Currently setting initial state for ${fieldsKey}`);
+      console.log(fieldsData[fieldsKey]);
+    }
+    console.groupEnd();
+    return fieldsData;
+  };
+
+  async function lockEntry(data) {
+    console.group("lockEntry");
+    console.log("Locking entry");
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+      },
+      body: JSON.stringify({...data, details: 'status', entryState: EntryState.EDITING})
+    });
+    console.log("Entry Locked");
+    console.groupEnd();
+    return response.json();
+  }
+
+  async function unlockEntry(data) {
+    console.group("lockEntry");
+    console.log("Unlocking entry");
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+      },
+      body: JSON.stringify({...data, details: 'status', entryState: EntryState.EDITABLE})
+    });
+    console.log("Entry Unlocked");
+    console.groupEnd();
+    return response.json();
+  }
+
+  const commit = () => {
+    console.group("Commit");
+    console.log("Commiting data");
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+      },
+      body: JSON.stringify({
+        entryId: sdk.entry.getSys().id,
+        details: Date.now().toString(),
+        data: getFieldData(sdk.entry.fields)
+      })
+    }).then(() => {
+      unlockEntry({
+        userId: sdk.user.sys.id,
+        entryId: sdk.entry.getSys().id
+      }).then(() => entryState = EntryState.EDITABLE);
+    });
+    console.log("Data commited");
+    console.groupEnd();
+  };
+
+  const rollback = () => {
+    const setFieldPromises = [];
+    for (const fieldsKey in sdk.entry.fields) {
+      setFieldPromises.push(
+        sdk.entry.fields[fieldsKey].setValue(beforeCheckoutFieldValues[fieldsKey])
+      );
+    }
+    Promise.all(setFieldPromises).then(() =>
+      unlockEntry({
+        userId: sdk.user.sys.id,
+        entryId: sdk.entry.getSys().id
+      }).then(() => entryState = EntryState.EDITABLE)
+    );
+  };
+
+</script>
+
+{#if !fetchedInitialEntryData}
+  <p>Loading...</p>
+{:else}
+  {#if entryState == EntryState.READ_ONLY}
+    Some else is editing this entry!
+  {:else if entryState == EntryState.EDITABLE}
+    <button on:click={() => {lockEntry({
+            userId: sdk.user.sys.id,
+            entryId: sdk.entry.getSys().id,
+            initialValues: beforeCheckoutFieldValues
+          }).then(() => {
+            entryState = EntryState.EDITING;
+          }).catch(e => {
+            console.log(e)
+          })}}>Checkout
+    </button>
+  {:else if entryState == EntryState.EDITING}
+    <button on:click={commit}>Checkin</button>
+    <button on:click={rollback}>Discard</button>
+  {/if}
+{/if}
