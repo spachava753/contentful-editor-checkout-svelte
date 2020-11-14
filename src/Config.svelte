@@ -1,5 +1,5 @@
 <script>
-  import {onMount, onDestroy} from 'svelte';
+  import {onMount} from 'svelte';
   import {isEmpty} from 'lodash-es';
 
   export let sdk;

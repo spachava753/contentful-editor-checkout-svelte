@@ -1,6 +1,7 @@
 <script>
   import {onMount, onDestroy} from 'svelte';
   import {isEqual, isEmpty} from 'lodash-es';
+  import { fade } from 'svelte/transition';
 
   const EntryState = {
     EDITABLE: "EDITABLE",
@@ -182,13 +183,14 @@
 
 </script>
 
-{#if !fetchedInitialEntryData}
-  <p>Loading...</p>
-{:else}
-  {#if entryState == EntryState.READ_ONLY}
-    Some else is editing this entry!
-  {:else if entryState == EntryState.EDITABLE}
-    <button on:click={() => {lockEntry({
+<div class="container">
+  {#if !fetchedInitialEntryData}
+    <p>Loading...</p>
+  {:else}
+    {#if entryState == EntryState.READ_ONLY}
+      Some else is editing this entry!
+    {:else if entryState == EntryState.EDITABLE}
+      <button in:fade="{{duration: 300}}" id="checkout-btn" on:click={() => {lockEntry({
             userId: sdk.user.sys.id,
             entryId: sdk.entry.getSys().id,
             initialValues: beforeCheckoutFieldValues
@@ -197,9 +199,64 @@
           }).catch(e => {
             console.log(e)
           })}}>Checkout
-    </button>
-  {:else if entryState == EntryState.EDITING}
-    <button on:click={commit}>Checkin</button>
-    <button on:click={rollback}>Discard</button>
+      </button>
+    {:else if entryState == EntryState.EDITING}
+      <button in:fade="{{duration: 300}}" id="checkin-btn" on:click={commit}>Checkin</button>
+      <button in:fade="{{duration: 300}}" id="discard-btn" on:click={rollback}>Discard</button>
+    {/if}
   {/if}
-{/if}
+</div>
+
+<style>
+    .container {
+        display: flex; /* or inline-flex */
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: space-evenly;
+    }
+
+    .container > button {
+        flex-grow: 1;
+        display: inline;
+        padding: 0.7rem;
+        border-radius: 3px;
+    }
+
+    #checkout-btn {
+        color: var(--color-white);
+        background-color: var(--color-green-mid);
+        border-color: var(--color-green-mid);
+    }
+
+    #checkout-btn:hover {
+        color: var(--color-white);
+        background-color: var(--color-green-dark);
+        border-color: var(--color-green-dark);
+    }
+
+    #checkin-btn {
+        color: var(--color-white);
+        background-color: var(--color-blue-mid);
+        border-color: var(--color-blue-mid);
+        margin-right: 0.1rem;
+    }
+
+    #checkin-btn:hover {
+        color: var(--color-white);
+        background-color: var(--color-blue-dark);
+        border-color: var(--color-blue-dark);
+    }
+
+    #discard-btn {
+        color: var(--color-white);
+        background-color: var(--color-red-mid);
+        border-color: var(--color-red-mid);
+        margin-left: 0.1rem;
+    }
+
+    #discard-btn:hover {
+        color: var(--color-white);
+        background-color: var(--color-red-base);
+        border-color: var(--color-red-base);
+    }
+</style>
