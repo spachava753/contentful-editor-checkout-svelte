@@ -3,7 +3,6 @@
   import {isEmpty} from 'lodash-es';
 
   export let sdk;
-  let name = "world";
   const app = sdk.app;
 
   let url = '';
@@ -63,7 +62,7 @@
 
     {#await getParams()}
         Fetching app params
-    {:then n}
+    {:then _}
         <label for="endpointInput">
             API Gateway Endpoint
         </label>
