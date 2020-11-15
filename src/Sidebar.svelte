@@ -1,7 +1,7 @@
 <script>
   import {onMount, onDestroy} from 'svelte';
   import {isEqual, isEmpty} from 'lodash-es';
-  import { fade } from 'svelte/transition';
+  import {fade} from 'svelte/transition';
 
   const EntryState = {
     EDITABLE: "EDITABLE",
@@ -65,24 +65,27 @@
         );
       }
       // call api to check if entry is editable
-      const response = await fetch(url + `${sdk.entry.getSys().id}/status`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey
-        }
-      });
-      const data = await response.json();
-      console.log(`Fetched remote data: ${JSON.stringify(data)}`);
-      // entry doesn't exist in db
-      if (isEmpty(data)) return;
+      try {
+        const response = await fetch(url + `${sdk.entry.getSys().id}/status`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey
+          }
+        });
+        const data = await response.json();
+        console.log(`Fetched remote data: ${JSON.stringify(data)}`);
 
-      if (data.entryState == 'EDITING') {
-        // current user has previously checked out
-        if (data.userId == sdk.user.sys.id) {
-          entryState = EntryState.EDITING;
-          beforeCheckoutFieldValues = data.initialValues;
+        if (data.entryState == 'EDITING') {
+          // current user has previously checked out
+          if (data.userId == sdk.user.sys.id) {
+            entryState = EntryState.EDITING;
+            beforeCheckoutFieldValues = data.initialValues;
+          }
         }
+      } catch (err) {
+        // entry doesn't exist in db
+        console.log(`Error calling api ${url + `${sdk.entry.getSys().id}/status`}`);
       }
 
       fetchedInitialEntryData = true;
@@ -160,7 +163,10 @@
       unlockEntry({
         userId: sdk.user.sys.id,
         entryId: sdk.entry.getSys().id
-      }).then(() => entryState = EntryState.EDITABLE);
+      }).then(() => {
+        entryState = EntryState.EDITABLE;
+        beforeCheckoutFieldValues = getFieldData(sdk.entry.fields);
+      });
     });
     console.log("Data commited");
     console.groupEnd();
