@@ -19,12 +19,9 @@
   let resettingValue = false;
   let fetchedInitialEntryData = false;
 
-  onMount(
-    async () => {
-      console.log('starting window resizer');
-      sdk.window.startAutoResizer();
-      // register handlers to reset values
-      for (const fieldsKey in sdk.entry.fields) {
+  function assignFieldHandlers() {
+    // register handlers to reset values
+    for (const fieldsKey in sdk.entry.fields) {
         const field = sdk.entry.fields[fieldsKey];
         detachFieldHandlers.push(
           field.onValueChanged(value => {
@@ -64,8 +61,10 @@
           })
         );
       }
-      // call api to check if entry is editable
-      try {
+  }
+
+  async function checkEntry() {
+    try {
         const response = await fetch(url + `${sdk.entry.getSys().id}/status`, {
           method: 'GET',
           headers: {
@@ -81,12 +80,24 @@
           if (data.userId == sdk.user.sys.id) {
             entryState = EntryState.EDITING;
             beforeCheckoutFieldValues = data.initialValues;
+          } else {
+            entryState = EntryState.READ_ONLY
           }
         }
       } catch (err) {
         // entry doesn't exist in db
         console.log(`Error calling api ${url + `${sdk.entry.getSys().id}/status`}`);
       }
+  }
+
+  onMount(
+    async () => {
+      console.log('Starting window resizer');
+      sdk.window.startAutoResizer();
+      assignFieldHandlers();
+
+      // call api to check if entry is editable
+      await checkEntry();
 
       fetchedInitialEntryData = true;
     }
@@ -145,8 +156,27 @@
     return response.json();
   }
 
-  const commit = () => {
+  async function checkout() {
+    console.group("checkout");
+    console.log("checking entry");
+    await checkEntry();
+    if(entryState == EntryState.READ_ONLY)
+      return;
+    await lockEntry({
+            userId: sdk.user.sys.id,
+            entryId: sdk.entry.getSys().id,
+            initialValues: beforeCheckoutFieldValues
+          })
+    entryState = EntryState.EDITING;
+    console.groupEnd();
+  }
+
+  async function commit () {
     console.group("Commit");
+    console.log("checking entry");
+    await checkEntry();
+    if(entryState == EntryState.READ_ONLY)
+      return;
     console.log("Commiting data");
     fetch(url, {
       method: 'POST',
@@ -172,19 +202,27 @@
     console.groupEnd();
   };
 
-  const rollback = () => {
+  async function rollback() {
+    console.group("Rollback");
+    console.log("checking entry");
+    await checkEntry();
+    if(entryState == EntryState.READ_ONLY)
+      return;
+    console.log("Rolling back data");
     const setFieldPromises = [];
     for (const fieldsKey in sdk.entry.fields) {
       setFieldPromises.push(
         sdk.entry.fields[fieldsKey].setValue(beforeCheckoutFieldValues[fieldsKey])
       );
     }
-    Promise.all(setFieldPromises).then(() =>
-      unlockEntry({
+    await Promise.all(setFieldPromises);
+    await unlockEntry({
         userId: sdk.user.sys.id,
         entryId: sdk.entry.getSys().id
-      }).then(() => entryState = EntryState.EDITABLE)
-    );
+      })
+    entryState = EntryState.EDITABLE;
+    console.log("Rolled back data");
+    console.groupEnd();
   };
 
 </script>
@@ -196,18 +234,10 @@
     {#if entryState == EntryState.READ_ONLY}
       Some else is editing this entry!
     {:else if entryState == EntryState.EDITABLE}
-      <button in:fade="{{duration: 300}}" id="checkout-btn" on:click={() => {lockEntry({
-            userId: sdk.user.sys.id,
-            entryId: sdk.entry.getSys().id,
-            initialValues: beforeCheckoutFieldValues
-          }).then(() => {
-            entryState = EntryState.EDITING;
-          }).catch(e => {
-            console.log(e)
-          })}}>Checkout
+      <button in:fade="{{duration: 300}}" id="checkout-btn" on:click={checkout}>Checkout
       </button>
     {:else if entryState == EntryState.EDITING}
-      <button in:fade="{{duration: 300}}" id="checkin-btn" on:click={commit}>Checkin</button>
+      <button in:fade="{{duration: 300}}" id="checkin-btn" on:click={commit}>Check In</button>
       <button in:fade="{{duration: 300}}" id="discard-btn" on:click={rollback}>Discard</button>
     {/if}
   {/if}
