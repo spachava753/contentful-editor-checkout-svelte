@@ -1,13 +1,9 @@
 <script>
   import { onMount, onDestroy } from "svelte";
-  import { isEqual, isEmpty } from "lodash-es";
+  import { isEqual } from "lodash-es";
   import { fade } from "svelte/transition";
-
-  const EntryState = {
-    EDITABLE: "EDITABLE",
-    EDITING: "EDITING",
-    READ_ONLY: "READ_ONLY",
-  };
+  import { getFieldData, lockEntry, unlockEntry } from "./utils";
+  import { EntryState } from "./entrystate";
 
   export let sdk;
   const { url, apiKey } = sdk.parameters.installation;
@@ -117,65 +113,15 @@
     });
   });
 
-  function getFieldData(fields) {
-    console.group("getFieldData");
-    const fieldsData = {};
-    for (const fieldsKey in fields) {
-      const field = fields[fieldsKey];
-      fieldsData[fieldsKey] = field.getValue();
-      console.log(`Currently setting initial state for ${fieldsKey}`);
-      console.log(fieldsData[fieldsKey]);
-    }
-    console.groupEnd();
-    return fieldsData;
-  }
-
-  async function lockEntry(data) {
-    console.group("lockEntry");
-    console.log("Locking entry");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        ...data,
-        details: "status",
-        entryState: EntryState.EDITING,
-      }),
-    });
-    console.log("Entry Locked");
-    console.groupEnd();
-    return response.json();
-  }
-
-  async function unlockEntry(data) {
-    console.group("lockEntry");
-    console.log("Unlocking entry");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        ...data,
-        details: "status",
-        entryState: EntryState.EDITABLE,
-      }),
-    });
-    console.log("Entry Unlocked");
-    console.groupEnd();
-    return response.json();
-  }
-
   async function checkout() {
     console.group("checkout");
     console.log("checking entry");
     await checkEntry();
-    if (entryState == EntryState.READ_ONLY) return;
-    await lockEntry({
+    if (entryState == EntryState.READ_ONLY) {
+      console.groupEnd();
+      return;
+    }
+    await lockEntry(url, apiKey, {
       userId: sdk.user.sys.id,
       entryId: sdk.entry.getSys().id,
       initialValues: beforeCheckoutFieldValues,
@@ -202,7 +148,7 @@
         data: getFieldData(sdk.entry.fields),
       }),
     }).then(() => {
-      unlockEntry({
+      unlockEntry(url, apiKey, {
         userId: sdk.user.sys.id,
         entryId: sdk.entry.getSys().id,
       }).then(() => {
@@ -229,7 +175,7 @@
       );
     }
     await Promise.all(setFieldPromises);
-    await unlockEntry({
+    await unlockEntry(url, apiKey, {
       userId: sdk.user.sys.id,
       entryId: sdk.entry.getSys().id,
     });
@@ -327,8 +273,7 @@
       disabled={disableButton}
       on:click={() => {
         disableButton = !disableButton;
-        rollback()
-        .then(() => {
+        rollback().then(() => {
           disableButton = !disableButton;
         });
       }}>Discard</button>
