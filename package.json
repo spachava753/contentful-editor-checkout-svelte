@@ -9,7 +9,8 @@
     "login": "contentful login",
     "logout": "contentful logout",
     "help": "contentful-extension-scripts help",
-    "validate": "svelte-check"
+    "validate": "svelte-check",
+    "deploy": "cd public && aws s3 rm s3://editor-checkout && aws s3 sync . s3://editor-checkout && cd .."
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^14.0.0",

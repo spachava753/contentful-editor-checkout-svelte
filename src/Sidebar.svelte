@@ -10,6 +10,7 @@
   $: console.log(`Params: ${JSON.stringify({ url, apiKey })}`);
   let beforeCheckoutFieldValues = getFieldData(sdk.entry.fields);
   let entryState = EntryState.EDITABLE;
+  let editingUserId = "";
   $: console.log(`entryState: ${entryState}`);
   const detachFieldHandlers = [];
   let resettingValue = false;
@@ -84,6 +85,7 @@
           beforeCheckoutFieldValues = data.initialValues;
         } else {
           entryState = EntryState.READ_ONLY;
+          editingUserId = data.userId;
         }
       }
     } catch (err) {
@@ -243,7 +245,7 @@
   {#if !fetchedInitialEntryData}
     <p>Loading...</p>
   {:else if entryState == EntryState.READ_ONLY}
-    Some else is editing this entry!
+    Some else is editing this entry! (User Id: {editingUserId})
   {:else if entryState == EntryState.EDITABLE}
     <button
       in:fade={{ duration: 300 }}
@@ -254,7 +256,7 @@
         checkout().then(() => {
           disableButton = !disableButton;
         });
-      }}>Checkout
+      }}>Check In
     </button>
   {:else if entryState == EntryState.EDITING}
     <button
@@ -266,7 +268,7 @@
         commit().then(() => {
           disableButton = !disableButton;
         });
-      }}>Check In</button>
+      }}>Check Out</button>
     <button
       in:fade={{ duration: 300 }}
       id="discard-btn"

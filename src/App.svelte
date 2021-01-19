@@ -8,6 +8,8 @@
 
   init(s => {
     sdk = s;
+    console.log(`sdk loaded`);
+    console.log(sdk);
   });
 </script>
 
