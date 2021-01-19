@@ -37,3 +37,6 @@ jobs:
       
       - name: Deploy
         run: cd public && aws s3 sync . s3://${{ secrets.BUCKET_NAME }}
+
+      - name: Invalidate cache
+        run: aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUD_FRONT_DIST_ID }} --paths "/*"
